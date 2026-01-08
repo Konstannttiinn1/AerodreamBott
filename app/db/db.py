@@ -22,7 +22,6 @@ class Database:
         db_path.parent.mkdir(parents=True, exist_ok=True)
 
     async def init(self, enable_automation: bool) -> None:
-        self._ensure_directory()
         async with self.connect() as conn:
             conn.row_factory = aiosqlite.Row
             await conn.executescript(
