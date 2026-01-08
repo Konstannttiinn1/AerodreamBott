@@ -13,6 +13,7 @@ class Database:
 
     def connect(self) -> aiosqlite.Connection:
         """Return async context manager for DB connection (canonical aiosqlite usage)."""
+        self._ensure_directory()
         return aiosqlite.connect(self.path)
 
     def _ensure_directory(self) -> None:
