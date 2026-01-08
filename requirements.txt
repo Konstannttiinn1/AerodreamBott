@@ -1,0 +1,4 @@
+aiogram==3.4.1
+aiosqlite==0.20.0
+PyYAML==6.0.1
+APScheduler==3.10.4
