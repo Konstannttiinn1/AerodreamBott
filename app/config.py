@@ -47,6 +47,7 @@ class Config:
         database_path = os.environ.get("DATABASE_PATH", "data/bot.db")
         timezone = os.environ.get("TIMEZONE", "Europe/Moscow")
         enable_automation = os.environ.get("ENABLE_AUTOMATION", "false").lower() in {"1", "true", "yes"}
+        db_path = Path(database_path).expanduser().resolve()
         return cls(
             bot_token=bot_token,
             admin_ids=admin_ids,
@@ -54,7 +55,7 @@ class Config:
             site_url=site_url,
             map_url=map_url,
             broadcast_rate_limit=broadcast_rate_limit,
-            database_path=str(Path(database_path).expanduser()),
+            database_path=str(db_path),
             timezone=timezone,
             enable_automation=enable_automation,
         )
