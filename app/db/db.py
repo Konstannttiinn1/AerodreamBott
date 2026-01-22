@@ -8,16 +8,24 @@ import os
 import aiosqlite
 
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+
 @dataclass(slots=True)
 class Database:
     path: str
 
     def __post_init__(self) -> None:
-        # Normalize the default Docker path for local Windows usage.
-        if os.name == "nt" and self.path.startswith("/app/"):
-            self.path = str(Path.cwd() / "data" / "bot.db")
+        # Normalize database path so it works in Windows and Docker, independent of CWD.
+        normalized = os.path.expandvars(self.path)
+        posix_hint = normalized.replace("\\", "/")
+        raw_path = Path(normalized)
+        if os.name == "nt" and posix_hint.startswith("/app/"):
+            self.path = str(PROJECT_ROOT / "data" / "bot.db")
+        elif raw_path.is_absolute():
+            self.path = str(raw_path.expanduser())
         else:
-            self.path = str(Path(self.path).expanduser())
+            self.path = str((PROJECT_ROOT / raw_path).expanduser())
 
     @staticmethod
     def _configure_connection(conn: aiosqlite.Connection) -> None:
