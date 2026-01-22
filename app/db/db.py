@@ -17,8 +17,10 @@ class Database:
 
     def __post_init__(self) -> None:
         # Normalize database path so it works in Windows and Docker, independent of CWD.
-        raw_path = Path(self.path)
-        if os.name == "nt" and self.path.startswith("/app/"):
+        normalized = os.path.expandvars(self.path)
+        posix_hint = normalized.replace("\\", "/")
+        raw_path = Path(normalized)
+        if os.name == "nt" and posix_hint.startswith("/app/"):
             self.path = str(PROJECT_ROOT / "data" / "bot.db")
         elif raw_path.is_absolute():
             self.path = str(raw_path.expanduser())
