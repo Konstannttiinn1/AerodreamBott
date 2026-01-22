@@ -21,11 +21,13 @@ class Database:
         posix_hint = normalized.replace("\\", "/")
         raw_path = Path(normalized)
         if os.name == "nt" and posix_hint.startswith("/app/"):
-            self.path = str(PROJECT_ROOT / "data" / "bot.db")
+            resolved = PROJECT_ROOT / "data" / "bot.db"
         elif raw_path.is_absolute():
-            self.path = str(raw_path.expanduser())
+            resolved = raw_path.expanduser()
         else:
-            self.path = str((PROJECT_ROOT / raw_path).expanduser())
+            resolved = (PROJECT_ROOT / raw_path).expanduser()
+        # Use strict=False to normalize without requiring the file to exist yet.
+        self.path = str(resolved.resolve(strict=False))
 
     @staticmethod
     def _configure_connection(conn: aiosqlite.Connection) -> None:
