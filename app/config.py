@@ -14,12 +14,14 @@ def _load_dotenv() -> None:
     candidates = [Path.cwd() / ".env", project_root / ".env"]
     for env_path in candidates:
         if env_path.exists():
-            for line in env_path.read_text(encoding="utf-8").splitlines():
+            for line in env_path.read_text(encoding="utf-8-sig").splitlines():
                 stripped = line.strip()
                 if not stripped or stripped.startswith("#") or "=" not in stripped:
                     continue
+                if stripped.startswith("export "):
+                    stripped = stripped[7:].lstrip()
                 key, value = stripped.split("=", 1)
-                key = key.strip()
+                key = key.strip().lstrip("\ufeff")
                 value = value.strip().strip('"').strip("'")
                 os.environ.setdefault(key, value)
             break
