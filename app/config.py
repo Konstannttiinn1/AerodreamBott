@@ -2,10 +2,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+from pathlib import Path
 
 
 def _parse_admin_ids(raw: str) -> set[int]:
     return {int(item.strip()) for item in raw.split(",") if item.strip()}
+
+
+def _load_dotenv() -> None:
+    project_root = Path(__file__).resolve().parents[1]
+    candidates = [Path.cwd() / ".env", project_root / ".env"]
+    for env_path in candidates:
+        if env_path.exists():
+            for line in env_path.read_text(encoding="utf-8-sig").splitlines():
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or "=" not in stripped:
+                    continue
+                if stripped.startswith("export "):
+                    stripped = stripped[7:].lstrip()
+                key, value = stripped.split("=", 1)
+                key = key.strip().lstrip("\ufeff")
+                value = value.strip().strip('"').strip("'")
+                os.environ.setdefault(key, value)
+            break
 
 
 @dataclass(slots=True)
@@ -22,6 +41,7 @@ class Config:
 
     @classmethod
     def from_env(cls) -> "Config":
+        _load_dotenv()
         bot_token = os.environ.get("BOT_TOKEN", "").strip()
         if not bot_token:
             raise RuntimeError("BOT_TOKEN is required")
