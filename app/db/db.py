@@ -12,11 +12,17 @@ class Database:
     def connect(self):
         return aiosqlite.connect(self.path)
 
-    async def init(self, enable_automation: bool):
-        async with self.connect() as conn:
-            ...
+    async def connect(self) -> aiosqlite.Connection:
+        # Create the parent directory so SQLite can create the file.
+        db_path = Path(self.path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        return await aiosqlite.connect(db_path)
 
-            """
+    async def init(self, enable_automation: bool) -> None:
+        async with await self.connect() as conn:
+            self._configure_connection(conn)
+            await conn.executescript(
+                """
                 CREATE TABLE IF NOT EXISTS users (
                     user_id INTEGER PRIMARY KEY,
                     username TEXT,
@@ -78,6 +84,7 @@ class Database:
             "offer_text": "Готовы подарить скидку 10% на первый полет. Нажмите кнопку ниже.",
         }
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             for key, value in defaults.items():
                 await conn.execute(
                     "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
@@ -87,6 +94,7 @@ class Database:
 
     async def upsert_user(self, user: dict, now: str) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute(
                 "SELECT user_id FROM users WHERE user_id = ?",
                 (user["user_id"],),
@@ -128,6 +136,7 @@ class Database:
 
     async def touch_user(self, user_id: int, now: str) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             await conn.execute(
                 "UPDATE users SET last_seen_at = ? WHERE user_id = ?",
                 (now, user_id),
@@ -136,6 +145,7 @@ class Database:
 
     async def set_subscription(self, user_id: int, is_subscribed: bool) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             await conn.execute(
                 "UPDATE users SET is_subscribed = ? WHERE user_id = ?",
                 (1 if is_subscribed else 0, user_id),
@@ -144,6 +154,7 @@ class Database:
 
     async def set_blocked(self, user_id: int, is_blocked: bool) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             await conn.execute(
                 "UPDATE users SET is_blocked = ? WHERE user_id = ?",
                 (1 if is_blocked else 0, user_id),
@@ -152,6 +163,7 @@ class Database:
 
     async def log_event(self, user_id: int, event: str, now: str) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             await conn.execute(
                 "INSERT INTO events (user_id, event, created_at) VALUES (?, ?, ?)",
                 (user_id, event, now),
@@ -160,6 +172,7 @@ class Database:
 
     async def create_discount_request(self, user_id: int, now: str) -> int:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute(
                 "INSERT INTO discount_requests (user_id, created_at, status) VALUES (?, ?, 'new')",
                 (user_id, now),
@@ -169,6 +182,7 @@ class Database:
 
     async def list_discount_requests(self, status: str = "new") -> list[aiosqlite.Row]:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute(
                 "SELECT * FROM discount_requests WHERE status = ? ORDER BY created_at DESC",
                 (status,),
@@ -177,6 +191,7 @@ class Database:
 
     async def update_discount_status(self, request_id: int, status: str, comment: str | None = None) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             await conn.execute(
                 "UPDATE discount_requests SET status = ?, comment = ? WHERE id = ?",
                 (status, comment, request_id),
@@ -185,6 +200,7 @@ class Database:
 
     async def create_broadcast(self, admin_id: int, audience: str, text: str, now: str) -> int:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute(
                 "INSERT INTO broadcasts (admin_id, created_at, audience, text, sent_count, failed_count) VALUES (?, ?, ?, ?, 0, 0)",
                 (admin_id, now, audience, text),
@@ -194,6 +210,7 @@ class Database:
 
     async def update_broadcast_counts(self, broadcast_id: int, sent: int, failed: int) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             await conn.execute(
                 "UPDATE broadcasts SET sent_count = ?, failed_count = ? WHERE id = ?",
                 (sent, failed, broadcast_id),
@@ -202,6 +219,7 @@ class Database:
 
     async def get_stats(self, now: datetime) -> dict:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute("SELECT COUNT(*) AS value FROM users")
             total_users = await cursor.fetchone()
             cursor = await conn.execute(
@@ -242,6 +260,7 @@ class Database:
 
     async def get_setting(self, key: str) -> str | None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute("SELECT value FROM settings WHERE key = ?", (key,))
             row = await cursor.fetchone()
             if row:
@@ -250,6 +269,7 @@ class Database:
 
     async def set_setting(self, key: str, value: str) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             await conn.execute(
                 "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
                 (key, value),
@@ -271,6 +291,7 @@ class Database:
             query += " AND last_seen_at < ?"
             params.append(audience["before"])
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute(query, params)
             rows = await cursor.fetchall()
             return [row["user_id"] for row in rows]
@@ -286,6 +307,7 @@ class Database:
         finished: bool,
     ) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             await conn.execute(
                 """
                 INSERT INTO user_flows (user_id, flow_name, step, triggered_at, next_run_at, last_message_at, finished)
@@ -300,6 +322,7 @@ class Database:
 
     async def get_flow(self, user_id: int, flow_name: str) -> aiosqlite.Row | None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute(
                 "SELECT * FROM user_flows WHERE user_id = ? AND flow_name = ?",
                 (user_id, flow_name),
@@ -308,6 +331,7 @@ class Database:
 
     async def get_due_flows(self, flow_name: str, now: str) -> list[aiosqlite.Row]:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute(
                 """
                 SELECT * FROM user_flows
@@ -319,6 +343,7 @@ class Database:
 
     async def finish_flow(self, user_id: int, flow_name: str) -> None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             await conn.execute(
                 "UPDATE user_flows SET finished = 1 WHERE user_id = ? AND flow_name = ?",
                 (user_id, flow_name),
@@ -327,11 +352,13 @@ class Database:
 
     async def get_user(self, user_id: int) -> aiosqlite.Row | None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
             return await cursor.fetchone()
 
     async def get_flow_cooldown(self, user_id: int, flow_name: str) -> aiosqlite.Row | None:
         async with await self.connect() as conn:
+            self._configure_connection(conn)
             cursor = await conn.execute(
                 "SELECT * FROM user_flows WHERE user_id = ? AND flow_name = ?",
                 (user_id, flow_name),
