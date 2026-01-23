@@ -1,38 +1,16 @@
 from __future__ import annotations
 
+import aiosqlite
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from pathlib import Path
-import os
-
-import aiosqlite
-
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(slots=True)
 class Database:
     path: str
 
-    def __post_init__(self) -> None:
-        # Normalize database path so it works in Windows and Docker, independent of CWD.
-        normalized = os.path.expandvars(self.path)
-        posix_hint = normalized.replace("\\", "/")
-        raw_path = Path(normalized)
-        if os.name == "nt" and posix_hint.startswith("/app/"):
-            resolved = PROJECT_ROOT / "data" / "bot.db"
-        elif raw_path.is_absolute():
-            resolved = raw_path.expanduser()
-        else:
-            resolved = (PROJECT_ROOT / raw_path).expanduser()
-        # Use strict=False to normalize without requiring the file to exist yet.
-        self.path = str(resolved.resolve(strict=False))
-
-    @staticmethod
-    def _configure_connection(conn: aiosqlite.Connection) -> None:
-        # Ensure Row access by column name.
-        conn.row_factory = aiosqlite.Row
+    def connect(self):
+        return aiosqlite.connect(self.path)
 
     async def connect(self) -> aiosqlite.Connection:
         # Create the parent directory so SQLite can create the file.
@@ -93,7 +71,7 @@ class Database:
                     PRIMARY KEY (user_id, flow_name)
                 );
                 """
-            )
+
             await conn.commit()
         await self.ensure_settings(enable_automation)
 
