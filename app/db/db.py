@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from pathlib import Path
+import pathlib
 import os
 
 import aiosqlite
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 
 @dataclass(slots=True)
@@ -19,7 +19,7 @@ class Database:
         # Normalize database path so it works in Windows and Docker, independent of CWD.
         normalized = os.path.expandvars(self.path)
         posix_hint = normalized.replace("\\", "/")
-        raw_path = Path(normalized)
+        raw_path = pathlib.Path(normalized)
         if os.name == "nt" and posix_hint.startswith("/app/"):
             resolved = PROJECT_ROOT / "data" / "bot.db"
         elif raw_path.is_absolute():
@@ -36,7 +36,7 @@ class Database:
 
     def connect(self) -> aiosqlite.Connection:
         # Create the parent directory so SQLite can create the file.
-        db_path = Path(self.path)
+        db_path = pathlib.Path(self.path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
         return aiosqlite.connect(db_path)
 
