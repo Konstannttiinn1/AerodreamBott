@@ -50,7 +50,8 @@ class Config:
         site_url = os.environ.get("SITE_URL", "").strip()
         map_url = os.environ.get("MAP_URL", "").strip()
         broadcast_rate_limit = int(os.environ.get("BROADCAST_RATE_LIMIT", "200"))
-        database_path = os.environ.get("DATABASE_PATH", "/app/data/bot.db")
+        default_db_path = "data/bot.db" if os.name == "nt" else "/app/data/bot.db"
+        database_path = os.environ.get("DATABASE_PATH", default_db_path)
         timezone = os.environ.get("TIMEZONE", "Europe/Moscow")
         enable_automation = os.environ.get("ENABLE_AUTOMATION", "false").lower() in {"1", "true", "yes"}
         return cls(
