@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import aiosqlite
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 import pathlib
@@ -93,7 +94,7 @@ class Database:
                     PRIMARY KEY (user_id, flow_name)
                 );
                 """
-            )
+
             await conn.commit()
         await self.ensure_settings(enable_automation)
 
