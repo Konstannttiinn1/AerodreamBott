@@ -5,6 +5,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message, CallbackQuery
+from aiogram.exceptions import TelegramBadRequest
 
 from app.config import Config
 from app.db.db import Database
@@ -104,9 +105,14 @@ async def automation_actions(callback: CallbackQuery, callback_data: AutomationC
     elif action == "set_offer":
         await state.set_state(AdminStates.automation_offer)
         await callback.message.answer("Введите текст предложения")
-    await callback.message.edit_reply_markup(
-        reply_markup=automation_keyboard((await db.get_setting("enable_price_followup")) == "true")
-    )
+    try:
+        await callback.message.edit_reply_markup(
+            reply_markup=automation_keyboard((await db.get_setting("enable_price_followup")) == "true")
+        )
+    except TelegramBadRequest as exc:
+        # Ignore redundant edit when reply markup is unchanged (avoids "message is not modified").
+        if "message is not modified" not in str(exc):
+            raise
     await callback.answer()
 
 
