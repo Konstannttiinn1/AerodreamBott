@@ -94,7 +94,7 @@ class Database:
                     PRIMARY KEY (user_id, flow_name)
                 );
                 """
-
+            )
             await conn.commit()
         await self.ensure_settings(enable_automation)
 
