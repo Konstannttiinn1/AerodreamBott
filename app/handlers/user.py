@@ -198,6 +198,9 @@ async def toggle_notifications(callback: CallbackQuery, callback_data: NotifyCal
 
 @router.message()
 async def fallback(message: Message, db: Database, config: Config, content: dict) -> None:
+    # Avoid swallowing commands so admin routes can handle them.
+    if message.text and message.text.startswith("/"):
+        return
     now = now_iso(config.timezone)
     await db.touch_user(message.from_user.id, now)
     await message.answer(content.get("menu_hint", "Выберите раздел из меню"), reply_markup=main_menu_keyboard())
