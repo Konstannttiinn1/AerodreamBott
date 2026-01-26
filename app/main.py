@@ -25,9 +25,10 @@ async def main() -> None:
 
     bot = Bot(config.bot_token)
     dp = Dispatcher()
-    dp.include_router(user_router)
+    # Admin routers must be registered before the user router to avoid fallback intercepting commands.
     dp.include_router(admin_router)
     dp.include_router(broadcast_router)
+    dp.include_router(user_router)
 
     asyncio.create_task(automation_loop(bot, db, config.timezone))
     await dp.start_polling(bot, config=config, db=db, content=content)
