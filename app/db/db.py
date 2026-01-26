@@ -39,7 +39,7 @@ class Database:
         # Create the parent directory so SQLite can create the file.
         db_path = pathlib.Path(self.path)
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        return aiosqlite.connect(db_path)
+        return aiosqlite.connect(self.path)
 
     async def init(self, enable_automation: bool) -> None:
         async with self.connect() as conn:
