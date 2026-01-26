@@ -17,7 +17,7 @@ def admin_menu_keyboard() -> ReplyKeyboardMarkup:
         keyboard=[
             [KeyboardButton(text="📊 Статистика"), KeyboardButton(text="📣 Рассылка")],
             [KeyboardButton(text="🎁 Запросы на скидку"), KeyboardButton(text="🤖 Автоматизация")],
-            [KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text="⚙️ Настройки"), KeyboardButton(text="🗑 Удалить пользователя")],
         ],
         resize_keyboard=True,
     )

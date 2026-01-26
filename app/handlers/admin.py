@@ -27,6 +27,7 @@ class AdminStates(StatesGroup):
     automation_t2 = State()
     automation_reminder = State()
     automation_offer = State()
+    delete_user = State()
 
 
 def _is_admin(user_id: int, config: Config) -> bool:
@@ -157,6 +158,14 @@ async def admin_settings(message: Message, db: Database, config: Config) -> None
     await message.answer(text)
 
 
+@router.message(F.text == "🗑 Удалить пользователя")
+async def admin_delete_user_prompt(message: Message, state: FSMContext, config: Config) -> None:
+    if not _is_admin(message.from_user.id, config):
+        return
+    await state.set_state(AdminStates.delete_user)
+    await message.answer("Введите user_id (число) для удаления")
+
+
 @router.callback_query(AdminDiscountCallback.filter())
 async def admin_discount_actions(
     callback: CallbackQuery,
@@ -192,6 +201,36 @@ async def admin_discount_comment(message: Message, state: FSMContext, db: Databa
     request_id = data.get("request_id")
     await db.update_discount_status(request_id, "processed", comment=message.text)
     await message.answer(f"Комментарий сохранен для заявки {request_id}")
+    await state.clear()
+
+
+@router.message(AdminStates.delete_user)
+async def admin_delete_user(message: Message, state: FSMContext, db: Database, config: Config) -> None:
+    if not _is_admin(message.from_user.id, config):
+        await state.clear()
+        return
+    raw_user_id = (message.text or "").strip()
+    if not raw_user_id.isdigit():
+        await message.answer("Введите user_id (число) для удаления")
+        return
+    user_id = int(raw_user_id)
+    if user_id == message.from_user.id:
+        await message.answer("Нельзя удалить самого себя")
+        return
+    deletions = await db.delete_user_data(user_id)
+    total_deleted = sum(deletions.values())
+    if total_deleted == 0:
+        await message.answer("Пользователь не найден (данных нет)")
+        await state.clear()
+        return
+    await message.answer(
+        "Удалено:\n"
+        f"users: {deletions['users']}\n"
+        f"user_flows: {deletions['user_flows']}\n"
+        f"events: {deletions['events']}\n"
+        f"discount_requests: {deletions['discount_requests']}\n"
+        "Готово"
+    )
     await state.clear()
 
 

@@ -379,6 +379,19 @@ class Database:
             cursor = await conn.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
             return await cursor.fetchone()
 
+    async def delete_user_data(self, user_id: int) -> dict[str, int]:
+        async with self.connect() as conn:
+            self._configure_connection(conn)
+            deletions: dict[str, int] = {}
+            for table in ("user_flows", "events", "discount_requests", "users"):
+                cursor = await conn.execute(
+                    f"DELETE FROM {table} WHERE user_id = ?",
+                    (user_id,),
+                )
+                deletions[table] = cursor.rowcount
+            await conn.commit()
+            return deletions
+
     async def get_flow_cooldown(self, user_id: int, flow_name: str) -> aiosqlite.Row | None:
         async with self.connect() as conn:
             self._configure_connection(conn)
