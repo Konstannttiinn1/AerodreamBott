@@ -18,6 +18,8 @@ from app.keyboards.inline import (
     broadcast_segment_keyboard,
 )
 from app.services.utils import now_dt
+from app.keyboards.reply import cancel_keyboard
+from app.services.fsm import safe_clear_state, set_fsm_state
 
 router = Router()
 
@@ -37,7 +39,7 @@ def _is_admin(user_id: int, config: Config) -> bool:
 async def broadcast_start(message: Message, state: FSMContext, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
         return
-    await state.clear()
+    await safe_clear_state(state, message.from_user, "broadcast")
     await message.answer("Выберите аудиторию", reply_markup=broadcast_audience_keyboard())
 
 
@@ -45,7 +47,7 @@ async def broadcast_start(message: Message, state: FSMContext, config: Config) -
 async def broadcast_cancel(callback: CallbackQuery, state: FSMContext, config: Config) -> None:
     if not _is_admin(callback.from_user.id, config):
         return
-    await state.clear()
+    await safe_clear_state(state, callback.from_user, "broadcast")
     await callback.message.edit_text("Рассылка отменена")
     await callback.answer()
 
@@ -55,8 +57,9 @@ async def broadcast_audience_test(callback: CallbackQuery, state: FSMContext, co
     if not _is_admin(callback.from_user.id, config):
         return
     await state.update_data(audience={"type": "test", "admin_ids": list(config.admin_ids)})
-    await state.set_state(BroadcastState.text)
-    await callback.message.edit_text("Введите текст рассылки (HTML поддерживается)")
+    await set_fsm_state(state, BroadcastState.text, callback.from_user, "broadcast text")
+    await callback.message.edit_text("Аудитория выбрана")
+    await callback.message.answer("Введите текст рассылки (HTML поддерживается)", reply_markup=cancel_keyboard())
     await callback.answer()
 
 
@@ -65,8 +68,9 @@ async def broadcast_audience_all(callback: CallbackQuery, state: FSMContext, con
     if not _is_admin(callback.from_user.id, config):
         return
     await state.update_data(audience={"type": "all"})
-    await state.set_state(BroadcastState.text)
-    await callback.message.edit_text("Введите текст рассылки (HTML поддерживается)")
+    await set_fsm_state(state, BroadcastState.text, callback.from_user, "broadcast text")
+    await callback.message.edit_text("Аудитория выбрана")
+    await callback.message.answer("Введите текст рассылки (HTML поддерживается)", reply_markup=cancel_keyboard())
     await callback.answer()
 
 
@@ -74,7 +78,7 @@ async def broadcast_audience_all(callback: CallbackQuery, state: FSMContext, con
 async def broadcast_audience_segment(callback: CallbackQuery, state: FSMContext, config: Config) -> None:
     if not _is_admin(callback.from_user.id, config):
         return
-    await state.set_state(BroadcastState.audience)
+    await set_fsm_state(state, BroadcastState.audience, callback.from_user, "broadcast audience")
     await callback.message.edit_text("Выберите сегмент", reply_markup=broadcast_segment_keyboard())
     await callback.answer()
 
@@ -83,7 +87,7 @@ async def broadcast_audience_segment(callback: CallbackQuery, state: FSMContext,
 async def broadcast_back_audience(callback: CallbackQuery, state: FSMContext, config: Config) -> None:
     if not _is_admin(callback.from_user.id, config):
         return
-    await state.clear()
+    await safe_clear_state(state, callback.from_user, "broadcast")
     await callback.message.edit_text("Выберите аудиторию", reply_markup=broadcast_audience_keyboard())
     await callback.answer()
 
@@ -93,20 +97,21 @@ async def broadcast_segment_type(callback: CallbackQuery, state: FSMContext, cal
     if not _is_admin(callback.from_user.id, config):
         return
     await state.update_data(segment_type=callback_data.action)
-    await state.set_state(BroadcastState.segment_days)
-    await callback.message.edit_text("Введите число дней для сегмента")
+    await set_fsm_state(state, BroadcastState.segment_days, callback.from_user, "broadcast segment days")
+    await callback.message.edit_text("Сегмент выбран")
+    await callback.message.answer("Введите число дней для сегмента", reply_markup=cancel_keyboard())
     await callback.answer()
 
 
 @router.message(BroadcastState.segment_days)
 async def broadcast_segment_days(message: Message, state: FSMContext, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
-        await state.clear()
+        await safe_clear_state(state, message.from_user, "broadcast")
         return
     try:
         days = int(message.text.strip())
     except ValueError:
-        await message.answer("Введите число дней (целое значение)")
+        await message.answer("Введите число дней (целое значение) или нажмите ❌ Отмена", reply_markup=cancel_keyboard())
         return
     data = await state.get_data()
     segment_type = data.get("segment_type")
@@ -116,17 +121,17 @@ async def broadcast_segment_days(message: Message, state: FSMContext, config: Co
     else:
         audience = {"type": "inactive", "before": (now - timedelta(days=days)).isoformat()}
     await state.update_data(audience=audience)
-    await state.set_state(BroadcastState.text)
-    await message.answer("Введите текст рассылки (HTML поддерживается)")
+    await set_fsm_state(state, BroadcastState.text, message.from_user, "broadcast text")
+    await message.answer("Введите текст рассылки (HTML поддерживается)", reply_markup=cancel_keyboard())
 
 
 @router.message(BroadcastState.text)
 async def broadcast_text(message: Message, state: FSMContext, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
-        await state.clear()
+        await safe_clear_state(state, message.from_user, "broadcast")
         return
     await state.update_data(text=message.html_text)
-    await state.set_state(BroadcastState.preview)
+    await set_fsm_state(state, BroadcastState.preview, message.from_user, "broadcast preview")
     await message.answer("Превью:")
     await message.answer(message.html_text, parse_mode="HTML", reply_markup=broadcast_confirm_keyboard())
 
@@ -158,5 +163,5 @@ async def broadcast_confirm(callback: CallbackQuery, state: FSMContext, db: Data
         await asyncio.sleep(config.broadcast_rate_limit / 1000)
     await db.update_broadcast_counts(broadcast_id, sent, failed)
     await callback.message.answer(f"Рассылка завершена. Отправлено: {sent}, ошибок: {failed}")
-    await state.clear()
+    await safe_clear_state(state, callback.from_user, "broadcast")
     await callback.answer()
