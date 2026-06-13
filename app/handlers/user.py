@@ -3,6 +3,7 @@ from __future__ import annotations
 from aiogram import Router, F
 from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
 
 from app.config import Config
 from app.db.db import Database
@@ -21,6 +22,7 @@ from app.keyboards.inline import (
 )
 from app.services.utils import now_iso
 from app.services.automation import maybe_start_price_flow, stop_price_flow
+from app.services.fsm import safe_clear_state
 
 router = Router()
 
@@ -84,7 +86,8 @@ async def faq_item(callback: CallbackQuery, callback_data: FaqCallback, config: 
 
 
 @router.callback_query(FaqCallback.filter(F.action.in_({"menu", "list"})))
-async def faq_back(callback: CallbackQuery, callback_data: FaqCallback, config: Config, content: dict, db: Database) -> None:
+async def faq_back(callback: CallbackQuery, callback_data: FaqCallback, state: FSMContext, config: Config, content: dict, db: Database) -> None:
+    await safe_clear_state(state, callback.from_user, "back button")
     now = now_iso(config.timezone)
     await db.touch_user(callback.from_user.id, now)
     if callback_data.action == "menu":
@@ -117,7 +120,8 @@ async def discount_intro(callback: CallbackQuery, config: Config, content: dict,
 
 
 @router.callback_query(DiscountCallback.filter(F.action == "back_to_prices"))
-async def discount_back(callback: CallbackQuery, config: Config, content: dict, db: Database) -> None:
+async def discount_back(callback: CallbackQuery, state: FSMContext, config: Config, content: dict, db: Database) -> None:
+    await safe_clear_state(state, callback.from_user, "back button")
     now = now_iso(config.timezone)
     await db.touch_user(callback.from_user.id, now)
     await callback.message.edit_text(content.get("prices", ""), reply_markup=prices_keyboard(config.admin_tg_url))

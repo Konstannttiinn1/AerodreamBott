@@ -9,6 +9,7 @@ from aiogram import Bot, Dispatcher
 
 from app.config import Config
 from app.db.db import Database
+from app.handlers.system import router as system_router
 from app.handlers.user import router as user_router
 from app.handlers.admin import router as admin_router
 from app.handlers.broadcast import router as broadcast_router
@@ -25,6 +26,8 @@ async def main() -> None:
 
     bot = Bot(config.bot_token)
     dp = Dispatcher()
+    # System router has high priority so commands/cancel are not blocked by FSM handlers.
+    dp.include_router(system_router)
     # Admin routers must be registered before the user router to avoid fallback intercepting commands.
     dp.include_router(admin_router)
     dp.include_router(broadcast_router)

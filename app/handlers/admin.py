@@ -9,7 +9,7 @@ from aiogram.exceptions import TelegramBadRequest
 
 from app.config import Config
 from app.db.db import Database
-from app.keyboards.reply import admin_menu_keyboard
+from app.keyboards.reply import admin_menu_keyboard, cancel_keyboard
 from app.keyboards.inline import (
     admin_discount_keyboard,
     AutomationCallback,
@@ -17,6 +17,7 @@ from app.keyboards.inline import (
     AdminDiscountCallback,
 )
 from app.services.utils import now_dt
+from app.services.fsm import safe_clear_state, set_fsm_state
 
 router = Router()
 
@@ -35,17 +36,19 @@ def _is_admin(user_id: int, config: Config) -> bool:
 
 
 @router.message(Command("admin"))
-async def admin_start(message: Message, config: Config) -> None:
+async def admin_start(message: Message, state: FSMContext, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
         await message.answer("Доступ запрещен")
         return
+    await safe_clear_state(state, message.from_user, "/admin")
     await message.answer("Админ-панель", reply_markup=admin_menu_keyboard())
 
 
 @router.message(F.text == "📊 Статистика")
-async def admin_stats(message: Message, db: Database, config: Config) -> None:
+async def admin_stats(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
         return
+    await safe_clear_state(state, message.from_user, "admin menu action")
     stats = await db.get_stats(now_dt(config.timezone))
     text = (
         "📊 Статистика\n"
@@ -61,9 +64,10 @@ async def admin_stats(message: Message, db: Database, config: Config) -> None:
 
 
 @router.message(F.text == "🎁 Запросы на скидку")
-async def admin_discount_requests(message: Message, db: Database, config: Config) -> None:
+async def admin_discount_requests(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
         return
+    await safe_clear_state(state, message.from_user, "admin menu action")
     requests = await db.list_discount_requests("new")
     if not requests:
         await message.answer("Новых заявок нет")
@@ -95,17 +99,17 @@ async def automation_actions(callback: CallbackQuery, callback_data: AutomationC
         await db.set_setting("enable_price_followup", "false" if current else "true")
         await callback.answer("Обновлено")
     elif action == "set_t1":
-        await state.set_state(AdminStates.automation_t1)
-        await callback.message.answer("Введите T1 в часах")
+        await set_fsm_state(state, AdminStates.automation_t1, callback.from_user, "automation_t1")
+        await callback.message.answer("Введите T1 в часах", reply_markup=cancel_keyboard())
     elif action == "set_t2":
-        await state.set_state(AdminStates.automation_t2)
-        await callback.message.answer("Введите T2 в часах")
+        await set_fsm_state(state, AdminStates.automation_t2, callback.from_user, "automation_t2")
+        await callback.message.answer("Введите T2 в часах", reply_markup=cancel_keyboard())
     elif action == "set_reminder":
-        await state.set_state(AdminStates.automation_reminder)
-        await callback.message.answer("Введите текст напоминания")
+        await set_fsm_state(state, AdminStates.automation_reminder, callback.from_user, "automation_reminder")
+        await callback.message.answer("Введите текст напоминания", reply_markup=cancel_keyboard())
     elif action == "set_offer":
-        await state.set_state(AdminStates.automation_offer)
-        await callback.message.answer("Введите текст предложения")
+        await set_fsm_state(state, AdminStates.automation_offer, callback.from_user, "automation_offer")
+        await callback.message.answer("Введите текст предложения", reply_markup=cancel_keyboard())
     try:
         await callback.message.edit_reply_markup(
             reply_markup=automation_keyboard((await db.get_setting("enable_price_followup")) == "true")
@@ -118,9 +122,10 @@ async def automation_actions(callback: CallbackQuery, callback_data: AutomationC
 
 
 @router.message(F.text == "🤖 Автоматизация")
-async def admin_automation(message: Message, db: Database, config: Config) -> None:
+async def admin_automation(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
         return
+    await safe_clear_state(state, message.from_user, "admin menu action")
     enabled = (await db.get_setting("enable_price_followup")) == "true"
     t1 = await db.get_setting("t1_hours")
     t2 = await db.get_setting("t2_hours")
@@ -138,9 +143,10 @@ async def admin_automation(message: Message, db: Database, config: Config) -> No
 
 
 @router.message(F.text == "⚙️ Настройки")
-async def admin_settings(message: Message, db: Database, config: Config) -> None:
+async def admin_settings(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
         return
+    await safe_clear_state(state, message.from_user, "admin menu action")
     enabled = (await db.get_setting("enable_price_followup")) == "true"
     t1 = await db.get_setting("t1_hours")
     t2 = await db.get_setting("t2_hours")
@@ -162,8 +168,8 @@ async def admin_settings(message: Message, db: Database, config: Config) -> None
 async def admin_delete_user_prompt(message: Message, state: FSMContext, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
         return
-    await state.set_state(AdminStates.delete_user)
-    await message.answer("Введите user_id (число) для удаления")
+    await set_fsm_state(state, AdminStates.delete_user, message.from_user, "delete_user")
+    await message.answer("Введите user_id (число) для удаления", reply_markup=cancel_keyboard())
 
 
 @router.callback_query(AdminDiscountCallback.filter())
@@ -186,32 +192,32 @@ async def admin_discount_actions(
         await db.update_discount_status(request_id, "declined")
         await callback.message.answer(f"Заявка {request_id} отклонена")
     elif action == "comment":
-        await state.set_state(AdminStates.discount_comment)
+        await set_fsm_state(state, AdminStates.discount_comment, callback.from_user, "discount_comment")
         await state.update_data(request_id=request_id)
-        await callback.message.answer("Введите комментарий к заявке")
+        await callback.message.answer("Введите комментарий к заявке", reply_markup=cancel_keyboard())
     await callback.answer()
 
 
 @router.message(AdminStates.discount_comment)
 async def admin_discount_comment(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
-        await state.clear()
+        await safe_clear_state(state, message.from_user, "admin handler")
         return
     data = await state.get_data()
     request_id = data.get("request_id")
     await db.update_discount_status(request_id, "processed", comment=message.text)
     await message.answer(f"Комментарий сохранен для заявки {request_id}")
-    await state.clear()
+    await safe_clear_state(state, message.from_user, "admin handler")
 
 
 @router.message(AdminStates.delete_user)
 async def admin_delete_user(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
-        await state.clear()
+        await safe_clear_state(state, message.from_user, "admin handler")
         return
     raw_user_id = (message.text or "").strip()
     if not raw_user_id.isdigit():
-        await message.answer("Введите user_id (число) для удаления")
+        await message.answer("Введите число или нажмите ❌ Отмена", reply_markup=cancel_keyboard())
         return
     user_id = int(raw_user_id)
     if user_id == message.from_user.id:
@@ -221,7 +227,7 @@ async def admin_delete_user(message: Message, state: FSMContext, db: Database, c
     total_deleted = sum(deletions.values())
     if total_deleted == 0:
         await message.answer("Пользователь не найден (данных нет)")
-        await state.clear()
+        await safe_clear_state(state, message.from_user, "admin handler")
         return
     await message.answer(
         "Удалено:\n"
@@ -231,44 +237,52 @@ async def admin_delete_user(message: Message, state: FSMContext, db: Database, c
         f"discount_requests: {deletions['discount_requests']}\n"
         "Готово"
     )
-    await state.clear()
+    await safe_clear_state(state, message.from_user, "admin handler")
 
 
 @router.message(AdminStates.automation_t1)
 async def update_t1(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
-        await state.clear()
+        await safe_clear_state(state, message.from_user, "admin handler")
         return
-    await db.set_setting("t1_hours", message.text.strip())
+    raw_hours = (message.text or "").strip()
+    if not raw_hours.isdigit():
+        await message.answer("Введите число часов для T1 или нажмите ❌ Отмена", reply_markup=cancel_keyboard())
+        return
+    await db.set_setting("t1_hours", raw_hours)
     await message.answer("T1 обновлен")
-    await state.clear()
+    await safe_clear_state(state, message.from_user, "admin handler")
 
 
 @router.message(AdminStates.automation_t2)
 async def update_t2(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
-        await state.clear()
+        await safe_clear_state(state, message.from_user, "admin handler")
         return
-    await db.set_setting("t2_hours", message.text.strip())
+    raw_hours = (message.text or "").strip()
+    if not raw_hours.isdigit():
+        await message.answer("Введите число часов для T2 или нажмите ❌ Отмена", reply_markup=cancel_keyboard())
+        return
+    await db.set_setting("t2_hours", raw_hours)
     await message.answer("T2 обновлен")
-    await state.clear()
+    await safe_clear_state(state, message.from_user, "admin handler")
 
 
 @router.message(AdminStates.automation_reminder)
 async def update_reminder(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
-        await state.clear()
+        await safe_clear_state(state, message.from_user, "admin handler")
         return
     await db.set_setting("reminder_text", message.text)
     await message.answer("Текст напоминания обновлен")
-    await state.clear()
+    await safe_clear_state(state, message.from_user, "admin handler")
 
 
 @router.message(AdminStates.automation_offer)
 async def update_offer(message: Message, state: FSMContext, db: Database, config: Config) -> None:
     if not _is_admin(message.from_user.id, config):
-        await state.clear()
+        await safe_clear_state(state, message.from_user, "admin handler")
         return
     await db.set_setting("offer_text", message.text)
     await message.answer("Текст предложения обновлен")
-    await state.clear()
+    await safe_clear_state(state, message.from_user, "admin handler")
