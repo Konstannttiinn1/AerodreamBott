@@ -39,6 +39,19 @@ def section_keyboard(admin_url: str, back_action: str = "menu") -> InlineKeyboar
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
+def map_keyboard(admin_url: str, map_url: str) -> InlineKeyboardMarkup:
+    buttons = []
+    if map_url:
+        buttons.append([InlineKeyboardButton(text="🗺 Открыть карту", url=map_url)])
+    buttons.extend(
+        [
+            [InlineKeyboardButton(text="⬅️ Назад", callback_data=FaqCallback(action="menu").pack())],
+            [InlineKeyboardButton(text="👤 Связаться с администратором", url=admin_url)],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
 def faq_list_keyboard(faq_items: list[dict], admin_url: str) -> InlineKeyboardMarkup:
     rows = []
     for idx, item in enumerate(faq_items, start=1):
@@ -81,12 +94,6 @@ def discount_intro_keyboard() -> InlineKeyboardMarkup:
 def contacts_keyboard(admin_url: str, is_subscribed: bool) -> InlineKeyboardMarkup:
     buttons = [
         [InlineKeyboardButton(text="👤 Связаться с администратором", url=admin_url)],
-        [
-            InlineKeyboardButton(
-                text="✅ Получать уведомления" if not is_subscribed else "🚫 Не получать уведомления",
-                callback_data=NotifyCallback(action="on" if not is_subscribed else "off").pack(),
-            )
-        ],
         [InlineKeyboardButton(text="⬅️ Назад", callback_data=FaqCallback(action="menu").pack())],
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
