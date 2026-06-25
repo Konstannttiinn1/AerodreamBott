@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from aiogram import Router, F
 from aiogram.filters import CommandStart
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import FSInputFile, Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from pathlib import Path
+import logging
 
 from app.config import Config
 from app.db.db import Database
@@ -16,6 +18,7 @@ from app.keyboards.inline import (
     FaqCallback,
     discount_intro_keyboard,
     contacts_keyboard,
+    map_keyboard,
     NotifyCallback,
     admin_discount_keyboard,
     section_keyboard,
@@ -25,6 +28,7 @@ from app.services.automation import maybe_start_price_flow, stop_price_flow
 from app.services.fsm import safe_clear_state
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 def _user_dict(message: Message) -> dict:
@@ -160,9 +164,7 @@ async def map_section(message: Message, db: Database, config: Config, content: d
     await db.touch_user(message.from_user.id, now)
     await db.log_event(message.from_user.id, "map_open", now)
     text = content.get("map", "")
-    if config.map_url:
-        text = f"{text}\n\nКарта: {config.map_url}"
-    await message.answer(text, reply_markup=section_keyboard(config.admin_tg_url))
+    await message.answer(text, reply_markup=map_keyboard(config.admin_tg_url, config.map_url))
 
 
 @router.message(F.text == "📋 Подготовка / Правила")
@@ -170,6 +172,18 @@ async def rules_section(message: Message, db: Database, config: Config, content:
     now = now_iso(config.timezone)
     await db.touch_user(message.from_user.id, now)
     await message.answer(content.get("rules", ""), reply_markup=section_keyboard(config.admin_tg_url))
+
+
+@router.message(F.text == "🎫 Эл. билет vs Сертификат")
+async def certificate_section(message: Message, db: Database, config: Config, content: dict) -> None:
+    now = now_iso(config.timezone)
+    await db.touch_user(message.from_user.id, now)
+    image_path = Path("app/assets/certificate.jpg")
+    if image_path.exists():
+        await message.answer_photo(FSInputFile(image_path))
+    else:
+        logger.warning("Certificate image not found: %s", image_path)
+    await message.answer(content.get("certificate", ""), reply_markup=section_keyboard(config.admin_tg_url))
 
 
 @router.message(F.text == "👤 Контакты")
